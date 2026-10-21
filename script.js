@@ -1,6 +1,25 @@
 const STORAGE_KEY = "planner-events";
 const COLORS = ["#FFFFFF", "#FFF4B8", "#DDF1FF", "#FFDADA"];
 const DEFAULT_COLOR = "#FFFFFF";
+// 날짜 칸을 채울 진한 기준색 (흰색은 안 보여서 기본 파랑으로 대신한다). 저장되는 색 값은 그대로다.
+const TINT = { "#FFFFFF": "#5B7CFF", "#FFF4B8": "#F5C518", "#DDF1FF": "#4FB3F6", "#FFDADA": "#FF6B6B" };
+const TINT_ALPHA = 0.3;
+
+function tintOf(color, alpha = TINT_ALPHA) {
+  const hex = (TINT[color] || TINT[DEFAULT_COLOR]).slice(1);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// 그 날의 일정 색들로 칸 배경을 만든다. 색이 여러 개면 비스듬히 나눠 칠한다.
+function dayTint(list) {
+  const colors = [...new Set(list.map(({ ev }) => ev.color))].map((c) => tintOf(c));
+  if (!colors.length) return "";
+  if (colors.length === 1) return `linear-gradient(${colors[0]}, ${colors[0]})`;
+  const step = 100 / colors.length;
+  const stops = colors.map((c, i) => `${c} ${i * step}% ${(i + 1) * step}%`);
+  return `linear-gradient(135deg, ${stops.join(", ")})`;
+}
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -191,6 +210,7 @@ function render(dir) {
     if (dow === 6) cell.classList.add("sat");
     if (holiday) cell.classList.add("holiday");
     if (key === todayKey) cell.classList.add("today");
+    if (list.length) cell.style.backgroundImage = dayTint(list);
     cell.setAttribute("role", "group");
     cell.setAttribute(
       "aria-label",
@@ -233,7 +253,7 @@ function render(dir) {
     list.slice(0, 3).forEach(({ ev }) => {
       const dot = document.createElement("span");
       dot.className = "dot";
-      dot.style.background = ev.color;
+      dot.style.background = TINT[ev.color] || TINT[DEFAULT_COLOR];
       dots.append(dot);
     });
     if (list.length > 3) {
