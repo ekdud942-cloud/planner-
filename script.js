@@ -96,6 +96,7 @@ function save() {
   } catch {
     alert("브라우저 저장소에 접근할 수 없어 일정이 유지되지 않을 수 있습니다.");
   }
+  if (window.plannerSync && window.plannerSync.onChange) window.plannerSync.onChange();
 }
 
 function countEvents(obj) {
@@ -679,6 +680,7 @@ function saveTodos() {
   } catch {
     alert("브라우저 저장소에 접근할 수 없어 할 일이 유지되지 않을 수 있습니다.");
   }
+  if (window.plannerSync && window.plannerSync.onChange) window.plannerSync.onChange();
 }
 
 // 기준 날짜가 속한 주의 일요일 키 (offset: 주 단위 이동)
@@ -967,3 +969,40 @@ importFile.addEventListener("change", async () => {
 
 render();
 renderTodos();
+
+/* ---------- 기기 간 동기화 연결부 (sync.js가 사용) ---------- */
+
+// 같은 날짜 키 아래에서 id가 같은 항목은 한 번만 남긴다
+function mergeById(a, b) {
+  const out = {};
+  for (const src of [a, b]) {
+    for (const [key, list] of Object.entries(src || {})) {
+      const target = (out[key] ||= []);
+      for (const item of list) if (!target.some((x) => x.id === item.id)) target.push(item);
+    }
+  }
+  return out;
+}
+
+window.plannerSync = {
+  onChange: null, // 로그인 상태에서 sync.js가 채운다
+  toast,
+  snapshot: () => ({ events, todos }),
+  merge: (a, b) => ({ events: mergeById(a.events, b.events), todos: mergeById(a.todos, b.todos) }),
+  normalize: (data) => ({
+    events: normalizeEvents(data && data.events, false) || {},
+    todos: normalizeTodos(data && data.todos, false) || {},
+  }),
+  // 서버에서 받은 데이터를 화면과 이 기기 저장소에 반영 (다시 서버로 보내지는 않는다)
+  apply(data) {
+    const next = window.plannerSync.normalize(data);
+    events = next.events;
+    todos = next.todos;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      localStorage.setItem(TODO_KEY, JSON.stringify(todos));
+    } catch {}
+    render();
+    renderTodos();
+  },
+};

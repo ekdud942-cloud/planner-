@@ -102,6 +102,9 @@ body::before {
 }
 .pill-btn .icon { display: none; font-size: 1.1rem; }
 .nav-btn:hover, .pill-btn:hover { background: rgba(255, 255, 255, .95); }
+.pill-btn[hidden] { display: none; }
+.pill-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill-btn.on:hover { background: var(--accent); filter: brightness(1.06); }
 
 /* 왼쪽 세로 월 목록 */
 .calendar-wrap {
