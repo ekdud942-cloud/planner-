@@ -633,6 +633,233 @@ calendar.addEventListener("touchend", (e) => {
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) moveMonth(dx < 0 ? 1 : -1);
 }, { passive: true });
 
+/* ---------- 주간 할 일 (날짜와 무관, 일~토 한 주 단위) ---------- */
+
+const TODO_KEY = "planner-todos";
+const todoList = document.getElementById("todo-list");
+const todoFolds = document.getElementById("todo-folds");
+const todoRange = document.getElementById("todo-range");
+let todos = loadTodos(); // { "그 주 일요일 YYYY-MM-DD": [{ id, text, done }] }
+let todoAdding = null; // 입력칸이 열려 있는 주(일요일 키)
+const foldOpen = { prev: false, next: false };
+
+function normalizeTodos(obj, strict) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+  const out = {};
+  for (const [key, list] of Object.entries(obj)) {
+    if (!DATE_KEY_RE.test(key) || !Array.isArray(list)) {
+      if (strict) return null;
+      continue;
+    }
+    const items = [];
+    for (const raw of list) {
+      const text = raw && typeof raw.text === "string" ? raw.text.trim() : "";
+      if (!text) {
+        if (strict) return null;
+        continue;
+      }
+      items.push({ id: typeof raw.id === "string" && raw.id ? raw.id : newId(), text, done: raw.done === true });
+    }
+    if (items.length) out[key] = items;
+  }
+  return out;
+}
+
+function loadTodos() {
+  try {
+    return normalizeTodos(JSON.parse(localStorage.getItem(TODO_KEY)), false) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTodos() {
+  try {
+    localStorage.setItem(TODO_KEY, JSON.stringify(todos));
+  } catch {
+    alert("브라우저 저장소에 접근할 수 없어 할 일이 유지되지 않을 수 있습니다.");
+  }
+}
+
+// 기준 날짜가 속한 주의 일요일 키 (offset: 주 단위 이동)
+function weekKey(offset = 0) {
+  const t = new Date();
+  const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() - t.getDay() + offset * 7);
+  return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function weekLabel(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  const end = new Date(y, m - 1, d + 6);
+  return `${m}/${d} (일) ~ ${end.getMonth() + 1}/${end.getDate()} (토)`;
+}
+
+function toggleTodo(wk, id) {
+  const t = (todos[wk] || []).find((x) => x.id === id);
+  if (!t) return;
+  t.done = !t.done;
+  saveTodos();
+  renderTodos();
+}
+
+function deleteTodo(wk, id) {
+  todos[wk] = (todos[wk] || []).filter((x) => x.id !== id);
+  if (!todos[wk].length) delete todos[wk];
+  saveTodos();
+  renderTodos();
+}
+
+function addTodo(wk, text) {
+  (todos[wk] ||= []).push({ id: newId(), text, done: false });
+  saveTodos();
+}
+
+function buildTodoItem(wk, t) {
+  const li = document.createElement("li");
+  li.className = "todo-item" + (t.done ? " done" : "");
+
+  const check = document.createElement("button");
+  check.type = "button";
+  check.className = "check";
+  check.textContent = t.done ? "✓" : "";
+  check.setAttribute("aria-pressed", String(t.done));
+  check.setAttribute("aria-label", `${t.text} 완료 표시`);
+  check.addEventListener("click", () => toggleTodo(wk, t.id));
+
+  const text = document.createElement("span");
+  text.className = "text";
+  text.textContent = t.text;
+
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "todo-del";
+  del.textContent = "✕";
+  del.setAttribute("aria-label", `${t.text} 삭제`);
+  del.addEventListener("click", () => deleteTodo(wk, t.id));
+
+  li.append(check, text, del);
+  return li;
+}
+
+// 목록 맨 위에 붙는 입력칸. Enter로 계속 이어서 추가, Esc/포커스 이탈 시 닫힘
+function buildTodoInput(wk) {
+  const li = document.createElement("li");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "todo-new";
+  input.maxLength = 100;
+  input.placeholder = "할 일을 입력하고 Enter";
+  input.setAttribute("aria-label", "새 할 일");
+  input.addEventListener("keydown", (e) => {
+    if (e.isComposing) return; // 한글 입력 조합 중 Enter 무시
+    if (e.key === "Enter") {
+      const text = input.value.trim();
+      if (!text) return;
+      input.dataset.closed = "1"; // 다시 그리면서 생기는 blur는 무시
+      addTodo(wk, text);
+      renderTodos();
+      const next = document.querySelector(".todo-new");
+      if (next) next.focus();
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      input.dataset.closed = "1";
+      todoAdding = null;
+      renderTodos();
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (input.dataset.closed || todoAdding !== wk) return;
+    input.dataset.closed = "1";
+    const text = input.value.trim();
+    if (text) addTodo(wk, text);
+    todoAdding = null;
+    renderTodos();
+  });
+  li.append(input);
+  return li;
+}
+
+function fillTodoList(ul, wk, emptyText) {
+  ul.replaceChildren();
+  if (todoAdding === wk) ul.append(buildTodoInput(wk));
+  const list = todos[wk] || [];
+  for (const t of list) ul.append(buildTodoItem(wk, t));
+  if (!list.length && todoAdding !== wk) {
+    const empty = document.createElement("li");
+    empty.className = "todo-empty";
+    empty.textContent = emptyText;
+    ul.append(empty);
+  }
+}
+
+function openAdd(wk) {
+  todoAdding = wk;
+  renderTodos();
+  const input = document.querySelector(".todo-new");
+  if (input) input.focus();
+}
+
+function renderTodos() {
+  const thisWk = weekKey(0);
+  todoRange.textContent = weekLabel(thisWk);
+  fillTodoList(todoList, thisWk, "이번주 할 일을 추가해보세요");
+
+  todoFolds.replaceChildren();
+  [["prev", "지난주 할일", -1, "지난주에 적은 할 일이 없어요"], ["next", "다음주 할일", 1, "다음주 할 일을 미리 적어둘 수 있어요"]].forEach(
+    ([id, label, offset, emptyText]) => {
+      const wk = weekKey(offset);
+      const fold = document.createElement("div");
+      fold.className = "fold" + (foldOpen[id] ? " open" : "");
+
+      const bar = document.createElement("button");
+      bar.type = "button";
+      bar.className = "fold-bar";
+      bar.setAttribute("aria-expanded", String(foldOpen[id]));
+      const name = document.createElement("span");
+      name.textContent = label;
+      const done = (todos[wk] || []).filter((t) => t.done).length;
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = (todos[wk] || []).length ? `${done}/${todos[wk].length}` : "";
+      const arrow = document.createElement("span");
+      arrow.className = "arrow";
+      arrow.textContent = "⌄";
+      bar.append(name, count, arrow);
+      bar.addEventListener("click", () => {
+        foldOpen[id] = !foldOpen[id];
+        renderTodos();
+      });
+
+      const body = document.createElement("div");
+      body.className = "fold-body";
+      const range = document.createElement("span");
+      range.className = "fold-range";
+      range.textContent = weekLabel(wk);
+      body.append(range);
+      if (offset > 0) {
+        // 다음주는 미리 적을 수 있다
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "todo-add-btn";
+        add.textContent = "+";
+        add.setAttribute("aria-label", "다음주 할 일 추가");
+        add.style.cssText = "width:26px;height:26px;font-size:1.05rem;float:right;margin-top:-20px";
+        add.addEventListener("click", () => openAdd(wk));
+        body.append(add);
+      }
+      const ul = document.createElement("ul");
+      ul.className = "fold-list";
+      fillTodoList(ul, wk, emptyText);
+      body.append(ul);
+
+      fold.append(bar, body);
+      todoFolds.append(fold);
+    }
+  );
+}
+
+document.getElementById("todo-add").addEventListener("click", () => openAdd(weekKey(0)));
+
 /* ---------- 토스트 ---------- */
 
 let toastTimer = null;
@@ -646,7 +873,7 @@ function toast(message) {
 /* ---------- 내보내기 / 불러오기 ---------- */
 
 document.getElementById("export-btn").addEventListener("click", () => {
-  const payload = { version: 1, exportedAt: new Date().toISOString(), events };
+  const payload = { version: 1, exportedAt: new Date().toISOString(), events, todos };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const stamp = dateKey(now.getFullYear(), now.getMonth(), now.getDate()).replaceAll("-", "");
   const a = document.createElement("a");
@@ -685,10 +912,15 @@ importFile.addEventListener("change", async () => {
   if (!file) return;
 
   let imported = null;
+  let importedTodos = null; // 예전 백업에는 없을 수 있다
   try {
     const data = JSON.parse(await file.text());
     if (data && typeof data === "object" && !Array.isArray(data)) {
       imported = normalizeEvents(data.events, true);
+      if (imported && data.todos !== undefined) {
+        importedTodos = normalizeTodos(data.todos, true);
+        if (!importedTodos) imported = null;
+      }
     }
   } catch {
     imported = null;
@@ -717,8 +949,21 @@ importFile.addEventListener("change", async () => {
     }
   }
   save();
+  if (importedTodos) {
+    if (mode === "replace") {
+      todos = importedTodos;
+    } else {
+      for (const [key, list] of Object.entries(importedTodos)) {
+        const target = (todos[key] ||= []);
+        for (const t of list) if (!target.some((x) => x.id === t.id)) target.push(t);
+      }
+    }
+    saveTodos();
+    renderTodos();
+  }
   render();
   toast(`일정 ${count}개를 불러왔어요`);
 });
 
 render();
+renderTodos();

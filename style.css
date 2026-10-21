@@ -49,7 +49,7 @@ body::before {
 .planner {
   position: relative;
   z-index: 1;
-  max-width: 1100px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 16px;
   height: 100vh;
@@ -325,6 +325,100 @@ body::before {
 .check::after { content: ""; position: absolute; inset: -8px; } /* 누르기 쉽게 터치 영역 확장 */
 .check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
 
+/* 오른쪽 주간 할 일 */
+.calendar-wrap { display: grid; grid-template-columns: 56px minmax(0, 1fr) 290px; }
+.todo {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 20px;
+}
+.todo-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.todo-title { min-width: 0; }
+.todo-title h2 { margin: 0; font-size: 1.1rem; }
+.todo-range { font-size: .75rem; color: var(--muted); }
+.todo-add-btn {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(91, 124, 255, .35);
+}
+.todo-add-btn:hover { filter: brightness(1.06); }
+
+.todo-list, .fold-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.todo-list { flex: 1; min-height: 0; overflow-y: auto; }
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid rgba(60, 70, 100, .14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .7);
+  font-size: .92rem;
+}
+.todo-item .check { width: 18px; height: 18px; font-size: .7rem; }
+.todo-item .text { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.todo-item.done .text { text-decoration: line-through; color: var(--muted); }
+.todo-item.done { opacity: .75; }
+.todo-del {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #b3bac6;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0;
+}
+.todo-item:hover .todo-del, .todo-del:focus-visible { opacity: 1; }
+.todo-del:hover { background: rgba(255, 255, 255, .9); color: var(--sun); }
+.todo-new {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .9);
+  font: inherit;
+  color: inherit;
+  outline: none;
+}
+.todo-empty { margin: 8px 0; text-align: center; color: var(--muted); font-size: .88rem; }
+
+.todo-folds { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.fold-bar {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  font: inherit;
+  font-size: .9rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.fold-bar:hover { background: rgba(255, 255, 255, .95); }
+.fold-bar .count { margin-left: auto; font-size: .78rem; color: var(--muted); }
+.fold-bar .arrow { transition: transform .15s; color: var(--muted); }
+.fold.open .fold-bar .arrow { transform: rotate(180deg); }
+.fold-body { display: none; padding: 8px 2px 2px; max-height: 190px; overflow-y: auto; }
+.fold.open .fold-body { display: block; }
+.fold-range { display: block; margin-bottom: 6px; font-size: .75rem; color: var(--muted); }
+
 /* 모바일 전용 요소는 기본 숨김 */
 .dots { display: none; }
 
@@ -473,7 +567,9 @@ body::before {
   .pill-btn .icon { display: inline; }
   #today-btn { padding: 0 12px; }
 
-  .calendar-wrap { gap: 4px; }
+  .calendar-wrap { gap: 4px; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .todo { grid-column: 1 / -1; max-height: 42dvh; padding: 10px; border-radius: 16px; }
+  .todo-del { opacity: 1; }
   .rail { flex-basis: 40px; padding: 8px 2px; border-radius: 16px; }
   .rail-month { font-size: .9rem; }
   .rail-year { font-size: .62rem; }
