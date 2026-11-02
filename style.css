@@ -113,35 +113,47 @@ body::before {
   display: flex;
   gap: 10px;
 }
-.rail {
-  flex: 0 0 56px;
+/* 달력 위쪽 가로 월 목록 (왼쪽은 메모장 자리) */
+.cal-col {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  gap: 10px;
+}
+.rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: 2px;
-  padding: 10px 6px;
-  overflow-y: auto;
+  padding: 6px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
-  border-radius: 20px;
+  border-radius: 999px;
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(249, 208, 230, .85), rgba(232, 237, 251, .85));
+  background: linear-gradient(90deg, rgba(249, 208, 230, .85), rgba(232, 237, 251, .85));
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
 }
 .rail::-webkit-scrollbar { display: none; }
 .rail-year {
-  margin: 8px 0 2px;
-  text-align: center;
+  flex-shrink: 0;
+  margin: 0 4px 0 12px;
   font-size: .72rem;
   font-weight: 700;
   letter-spacing: .02em;
   color: #8a6f93;
 }
-.rail-year:first-child { margin-top: 0; }
+.rail-year:first-child { margin-left: 4px; }
 .rail-month {
   flex-shrink: 0;
-  min-height: 40px;
+  min-width: 40px;
+  min-height: 36px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -329,8 +341,10 @@ body::before {
 .check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
 
 /* 오른쪽 주간 할 일 */
-.calendar-wrap { display: grid; grid-template-columns: 56px minmax(0, 1fr) 290px; }
+.calendar-wrap { display: grid; grid-template-columns: 240px minmax(0, 1fr) 290px; }
 .todo {
+  grid-column: 3;
+  grid-row: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -421,6 +435,57 @@ body::before {
 .fold-body { display: none; padding: 8px 2px 2px; max-height: 190px; overflow-y: auto; }
 .fold.open .fold-body { display: block; }
 .fold-range { display: block; margin-bottom: 6px; font-size: .75rem; color: var(--muted); }
+
+/* 왼쪽 메모장: 새 메모가 맨 위로 들어오고 이전 메모는 아래로 밀린다 */
+.memo {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 20px;
+}
+.memo-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.memo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.memo-item {
+  flex-shrink: 0;
+  padding: 8px 10px 6px;
+  border: 1px solid rgba(60, 70, 100, .14);
+  border-radius: 12px;
+  background: rgba(255, 246, 196, .72);
+}
+.memo-item:focus-within { border-color: var(--accent); background: rgba(255, 250, 215, .92); }
+.memo-item textarea {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  font: inherit;
+  font-size: .92rem;
+  line-height: 1.45;
+  color: inherit;
+  outline: none;
+}
+.memo-foot { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
+.memo-date { font-size: .7rem; color: var(--muted); }
+.memo-item:hover .todo-del, .memo-item:focus-within .todo-del { opacity: 1; }
+.memo-empty { margin: 8px 0; text-align: center; color: var(--muted); font-size: .88rem; }
 
 /* 모바일 전용 요소는 기본 숨김 */
 .dots { display: none; }
@@ -570,12 +635,16 @@ body::before {
   .pill-btn .icon { display: inline; }
   #today-btn { padding: 0 12px; }
 
-  .calendar-wrap { gap: 4px; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-  .todo { grid-column: 1 / -1; max-height: 42dvh; padding: 10px; border-radius: 16px; }
+  .calendar-wrap { gap: 4px; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; }
+  .cal-col { grid-column: 1; grid-row: 1; gap: 4px; }
+  .todo { grid-column: 1; grid-row: 2; max-height: 36dvh; padding: 10px; border-radius: 16px; }
+  .memo { grid-column: 1; grid-row: 3; max-height: 34dvh; padding: 10px; border-radius: 16px; }
+  .memo-head { cursor: pointer; }
+  .memo:not(.open) .memo-list { display: none; } /* 모바일은 접어두고 제목을 눌러 연다 */
   .todo-del { opacity: 1; }
-  .rail { flex-basis: 40px; padding: 8px 2px; border-radius: 16px; }
-  .rail-month { font-size: .9rem; }
-  .rail-year { font-size: .62rem; }
+  .rail { padding: 4px 8px; }
+  .rail-month { min-width: 34px; min-height: 32px; font-size: .9rem; }
+  .rail-year { font-size: .62rem; margin-left: 8px; }
   .calendar { padding: 6px; border-radius: 16px; }
   .weekdays div { font-size: .8rem; padding: 4px 0 6px; }
   .grid { border-radius: 10px; }

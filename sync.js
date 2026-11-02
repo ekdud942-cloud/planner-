@@ -40,12 +40,13 @@ function serialize(data) {
   return {
     events: JSON.stringify(data.events),
     todos: JSON.stringify(data.todos),
+    memos: JSON.stringify(data.memos || []),
     updatedAt: serverTimestamp(),
   };
 }
 
 function fromDoc(d) {
-  return api.normalize({ events: parse(d.events), todos: parse(d.todos) });
+  return api.normalize({ events: parse(d.events), todos: parse(d.todos), memos: parse(d.memos) });
 }
 
 function setButton(user) {
@@ -99,7 +100,7 @@ onAuthStateChanged(auth, async (user) => {
     if (snap.metadata.hasPendingWrites || !snap.exists()) return;
     const incoming = fromDoc(snap.data());
     const current = api.snapshot();
-    if (JSON.stringify(incoming) === JSON.stringify({ events: current.events, todos: current.todos })) return;
+    if (JSON.stringify(incoming) === JSON.stringify({ events: current.events, todos: current.todos, memos: current.memos })) return;
     api.apply(incoming);
   });
   api.toast("동기화가 연결됐어요");

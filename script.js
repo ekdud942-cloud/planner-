@@ -144,8 +144,14 @@ function eventsOn(key) {
 
 /* ---------- 달력 그리기 ---------- */
 
-// 왼쪽 세로 월 목록: 이번 달부터 15개월, 보고 있는 달이 범위 밖이면 범위를 넓힌다
+// 달력 위쪽 가로 월 목록: 이번 달부터 15개월, 보고 있는 달이 범위 밖이면 범위를 넓힌다
 const rail = document.getElementById("rail");
+// 마우스 휠을 위아래로 굴려도 가로로 움직이게 한다
+rail.addEventListener("wheel", (e) => {
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+  rail.scrollLeft += e.deltaY;
+  e.preventDefault();
+}, { passive: false });
 let railStart = now.getFullYear() * 12 + now.getMonth();
 let railEnd = railStart + 14;
 
@@ -153,7 +159,7 @@ function buildRail() {
   const view = viewYear * 12 + viewMonth;
   railStart = Math.min(railStart, view);
   railEnd = Math.max(railEnd, view);
-  const keepScroll = rail.scrollTop;
+  const keepScroll = rail.scrollLeft;
   rail.replaceChildren();
 
   let lastYear = null;
@@ -180,9 +186,16 @@ function buildRail() {
     });
     rail.append(btn);
   }
-  rail.scrollTop = keepScroll;
+  rail.scrollLeft = keepScroll;
+  // 보고 있는 달이 가려져 있으면 가운데로 가져온다 (scrollIntoView는 페이지까지 움직일 수 있어 직접 계산)
   const active = rail.querySelector(".active");
-  if (active) active.scrollIntoView({ block: "nearest" });
+  if (active) {
+    const a = active.getBoundingClientRect();
+    const r = rail.getBoundingClientRect();
+    if (a.left < r.left + 8 || a.right > r.right - 8) {
+      rail.scrollLeft += a.left + a.width / 2 - (r.left + r.width / 2);
+    }
+  }
 }
 
 function render(dir) {
@@ -882,6 +895,171 @@ function renderTodos() {
 
 document.getElementById("todo-add").addEventListener("click", () => openAdd(weekKey(0)));
 
+/* ---------- 왼쪽 메모장 (날짜와 무관, 새 메모가 맨 위로 오고 이전 메모는 아래로 밀린다) ---------- */
+
+const MEMO_KEY = "planner-memos";
+const memoPanel = document.getElementById("memo");
+const memoListEl = document.getElementById("memo-list");
+let memos = loadMemos(); // [{ id, text, at, updated }] 최신 메모가 맨 위
+let memoFocusId = null;
+let memoTimer = null;
+
+// 빈 메모는 저장하지 않는다. strict=true면 형식이 틀릴 때 null (불러오기 검사용)
+function normalizeMemos(arr, strict) {
+  if (!Array.isArray(arr)) return strict ? null : [];
+  const out = [];
+  for (const raw of arr) {
+    const text = raw && typeof raw.text === "string" ? raw.text : "";
+    if (!text.trim()) {
+      if (strict) return null;
+      continue;
+    }
+    const at = Number.isFinite(raw.at) ? raw.at : Date.now();
+    out.push({
+      id: typeof raw.id === "string" && raw.id ? raw.id : newId(),
+      text: text.slice(0, 2000),
+      at,
+      updated: Number.isFinite(raw.updated) ? raw.updated : at,
+    });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
+// 같은 id는 더 나중에 고친 쪽을 남긴다
+function mergeMemos(a, b) {
+  const map = new Map();
+  for (const m of [...(a || []), ...(b || [])]) {
+    const prev = map.get(m.id);
+    if (!prev || m.updated > prev.updated) map.set(m.id, m);
+  }
+  return [...map.values()].sort((x, y) => y.at - x.at);
+}
+
+function loadMemos() {
+  try {
+    return normalizeMemos(JSON.parse(localStorage.getItem(MEMO_KEY)), false);
+  } catch {
+    return [];
+  }
+}
+
+function savedMemos() {
+  return memos.filter((m) => m.text.trim());
+}
+
+function saveMemos() {
+  clearTimeout(memoTimer);
+  try {
+    localStorage.setItem(MEMO_KEY, JSON.stringify(savedMemos()));
+  } catch {
+    alert("브라우저 저장소에 접근할 수 없어 메모가 유지되지 않을 수 있습니다.");
+  }
+  if (window.plannerSync && window.plannerSync.onChange) window.plannerSync.onChange();
+}
+
+function fitMemo(ta) {
+  ta.style.height = "auto";
+  ta.style.height = ta.scrollHeight + "px";
+}
+
+function buildMemoItem(m) {
+  const li = document.createElement("li");
+  li.className = "memo-item";
+  li.dataset.id = m.id;
+
+  const ta = document.createElement("textarea");
+  ta.value = m.text;
+  ta.maxLength = 2000;
+  ta.rows = 2;
+  ta.placeholder = "메모를 적어보세요";
+  ta.setAttribute("aria-label", "메모");
+  ta.addEventListener("input", () => {
+    m.text = ta.value;
+    m.updated = Date.now();
+    fitMemo(ta);
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(saveMemos, 300);
+  });
+  ta.addEventListener("blur", () => {
+    if (!m.text.trim()) {
+      removeMemo(m.id); // 아무것도 안 적은 메모는 치운다
+    } else {
+      saveMemos();
+    }
+  });
+
+  const date = document.createElement("span");
+  date.className = "memo-date";
+  const d = new Date(m.at);
+  date.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
+
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "todo-del";
+  del.textContent = "✕";
+  del.setAttribute("aria-label", "메모 삭제");
+  // 입력칸의 blur보다 먼저 눌리도록 mousedown에서 막아 포커스가 옮겨 가며 목록이 다시 그려지는 일을 피한다
+  del.addEventListener("mousedown", (e) => e.preventDefault());
+  del.addEventListener("click", () => {
+    if (m.text.trim() && (coarseQuery.matches || sheetQuery.matches) && !window.confirm("이 메모를 삭제할까요?")) return;
+    removeMemo(m.id);
+  });
+
+  const foot = document.createElement("div");
+  foot.className = "memo-foot";
+  foot.append(date, del);
+
+  li.append(ta, foot);
+  return li;
+}
+
+function renderMemos() {
+  memoListEl.replaceChildren();
+  if (!memos.length) {
+    const empty = document.createElement("li");
+    empty.className = "memo-empty";
+    empty.textContent = "+ 버튼으로 메모를 추가해보세요";
+    memoListEl.append(empty);
+    return;
+  }
+  for (const m of memos) memoListEl.append(buildMemoItem(m));
+  memoListEl.querySelectorAll("textarea").forEach(fitMemo);
+  if (memoFocusId) {
+    const ta = memoListEl.querySelector(`[data-id="${memoFocusId}"] textarea`);
+    if (ta) ta.focus();
+    memoFocusId = null;
+  }
+}
+
+function addMemo() {
+  // 이미 비어 있는 새 메모가 맨 위에 있으면 그걸 다시 쓴다
+  const first = memos[0];
+  if (first && !first.text.trim()) {
+    memoFocusId = first.id;
+  } else {
+    const t = Date.now();
+    const m = { id: newId(), text: "", at: t, updated: t };
+    memos.unshift(m); // 맨 위에 넣으면 기존 메모는 자연히 아래로 밀린다
+    memoFocusId = m.id;
+  }
+  if (sheetQuery.matches) memoPanel.classList.add("open");
+  renderMemos();
+  memoListEl.scrollTop = 0;
+}
+
+function removeMemo(id) {
+  memos = memos.filter((m) => m.id !== id);
+  saveMemos();
+  renderMemos();
+}
+
+document.getElementById("memo-add").addEventListener("click", addMemo);
+// 모바일에서는 제목 줄을 눌러 메모장을 접고 편다
+document.getElementById("memo-head").addEventListener("click", (e) => {
+  if (!sheetQuery.matches || e.target.closest("#memo-add")) return;
+  memoPanel.classList.toggle("open");
+});
+
 /* ---------- 토스트 ---------- */
 
 let toastTimer = null;
@@ -895,7 +1073,7 @@ function toast(message) {
 /* ---------- 내보내기 / 불러오기 ---------- */
 
 document.getElementById("export-btn").addEventListener("click", () => {
-  const payload = { version: 1, exportedAt: new Date().toISOString(), events, todos };
+  const payload = { version: 1, exportedAt: new Date().toISOString(), events, todos, memos: savedMemos() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const stamp = dateKey(now.getFullYear(), now.getMonth(), now.getDate()).replaceAll("-", "");
   const a = document.createElement("a");
@@ -935,6 +1113,7 @@ importFile.addEventListener("change", async () => {
 
   let imported = null;
   let importedTodos = null; // 예전 백업에는 없을 수 있다
+  let importedMemos = null; // 메모장이 생기기 전 백업에도 없다
   try {
     const data = JSON.parse(await file.text());
     if (data && typeof data === "object" && !Array.isArray(data)) {
@@ -942,6 +1121,10 @@ importFile.addEventListener("change", async () => {
       if (imported && data.todos !== undefined) {
         importedTodos = normalizeTodos(data.todos, true);
         if (!importedTodos) imported = null;
+      }
+      if (imported && data.memos !== undefined) {
+        importedMemos = normalizeMemos(data.memos, true);
+        if (!importedMemos) imported = null;
       }
     }
   } catch {
@@ -983,12 +1166,18 @@ importFile.addEventListener("change", async () => {
     saveTodos();
     renderTodos();
   }
+  if (importedMemos) {
+    memos = mode === "replace" ? importedMemos : mergeMemos(memos, importedMemos);
+    saveMemos();
+    renderMemos();
+  }
   render();
   toast(`일정 ${count}개를 불러왔어요`);
 });
 
 render();
 renderTodos();
+renderMemos();
 
 /* ---------- 기기 간 동기화 연결부 (sync.js가 사용) ---------- */
 
@@ -1007,22 +1196,32 @@ function mergeById(a, b) {
 window.plannerSync = {
   onChange: null, // 로그인 상태에서 sync.js가 채운다
   toast,
-  snapshot: () => ({ events, todos }),
-  merge: (a, b) => ({ events: mergeById(a.events, b.events), todos: mergeById(a.todos, b.todos) }),
+  snapshot: () => ({ events, todos, memos: savedMemos() }),
+  merge: (a, b) => ({
+    events: mergeById(a.events, b.events),
+    todos: mergeById(a.todos, b.todos),
+    memos: mergeMemos(a.memos, b.memos),
+  }),
   normalize: (data) => ({
     events: normalizeEvents(data && data.events, false) || {},
     todos: normalizeTodos(data && data.todos, false) || {},
+    memos: normalizeMemos(data && data.memos, false),
   }),
   // 서버에서 받은 데이터를 화면과 이 기기 저장소에 반영 (다시 서버로 보내지는 않는다)
   apply(data) {
     const next = window.plannerSync.normalize(data);
     events = next.events;
     todos = next.todos;
+    // 지금 적고 있는 빈 메모는 그대로 두고, 나머지는 서버 내용으로 바꾼다
+    const draft = memos.find((m) => !m.text.trim());
+    memos = draft ? [draft, ...next.memos] : next.memos;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
       localStorage.setItem(TODO_KEY, JSON.stringify(todos));
+      localStorage.setItem(MEMO_KEY, JSON.stringify(savedMemos()));
     } catch {}
     render();
     renderTodos();
+    renderMemos();
   },
 };

@@ -37,14 +37,16 @@
     </header>
 
     <div class="calendar-wrap">
-      <nav class="rail" id="rail" aria-label="월 바로가기"></nav>
+      <div class="cal-col">
+        <nav class="rail" id="rail" aria-label="월 바로가기"></nav>
 
-      <section class="calendar glass" id="calendar">
-        <div class="weekdays" aria-hidden="true">
-          <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
-        </div>
-        <div class="grid" id="grid"></div>
-      </section>
+        <section class="calendar glass" id="calendar">
+          <div class="weekdays" aria-hidden="true">
+            <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
+          </div>
+          <div class="grid" id="grid"></div>
+        </section>
+      </div>
 
       <aside class="todo glass" id="todo" aria-label="이번주 해야할 일">
         <div class="todo-head">
@@ -56,6 +58,17 @@
         </div>
         <ul class="todo-list" id="todo-list"></ul>
         <div class="todo-folds" id="todo-folds"></div>
+      </aside>
+
+      <aside class="memo glass" id="memo" aria-label="메모장">
+        <div class="memo-head" id="memo-head">
+          <div class="todo-title">
+            <h2>메모</h2>
+            <span class="todo-range">새 메모는 맨 위에 쌓여요</span>
+          </div>
+          <button type="button" class="todo-add-btn" id="memo-add" aria-label="메모 추가" title="새 메모">+</button>
+        </div>
+        <ul class="memo-list" id="memo-list"></ul>
       </aside>
     </div>
   </main>
